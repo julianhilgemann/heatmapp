@@ -78,7 +78,7 @@ function makeSynthData(sy, ey) {
 // Custom interpolators using d3.scaleSequential / d3.piecewiseLinear approach
 function lerp(a, b, t) { return a + (b - a) * t; }
 function lerpColor(c0, c1, t) {
-  return `rgb(${Math.round(lerp(c0[0],c1[0],t))},${Math.round(lerp(c0[1],c1[1],t))},${Math.round(lerp(c0[2],c1[2],t))})`;
+  return `rgb(${Math.round(lerp(c0[0], c1[0], t))},${Math.round(lerp(c0[1], c1[1], t))},${Math.round(lerp(c0[2], c1[2], t))})`;
 }
 function piecewise(stops) {
   // stops: [[t, [r,g,b]], ...]
@@ -91,102 +91,122 @@ function piecewise(stops) {
         return lerpColor(c0, c1, Math.max(0, Math.min(1, f)));
       }
     }
-    return lerpColor(stops[stops.length-2][1], stops[stops.length-1][1], 1);
+    return lerpColor(stops[stops.length - 2][1], stops[stops.length - 1][1], 1);
   };
 }
 
 const PALETTES = {
   // ── Classic / Scientific ─────────────────────────────────────────────
-  "RdYlBu":    { label: "RdYlBu",      group: "Classic",  fn: (t) => d3.interpolateRdYlBu(1 - t) },
-  "Spectral":  { label: "Spectral",    group: "Classic",  fn: (t) => d3.interpolateSpectral(1 - t) },
-  "RdBu":      { label: "Red → Blue",  group: "Classic",  fn: (t) => d3.interpolateRdBu(1 - t) },
-  "PuOr":      { label: "Purple → Org",group: "Classic",  fn: (t) => d3.interpolatePuOr(t) },
-  "BrBG":      { label: "Brown → Teal",group: "Classic",  fn: (t) => d3.interpolateBrBG(t) },
-  "PRGn":      { label: "Purple → Grn",group: "Classic",  fn: (t) => d3.interpolatePRGn(t) },
-  "PiYG":      { label: "Pink → Green",group: "Classic",  fn: (t) => d3.interpolatePiYG(t) },
+  "RdYlBu": { label: "RdYlBu", group: "Classic", fn: (t) => d3.interpolateRdYlBu(1 - t) },
+  "Spectral": { label: "Spectral", group: "Classic", fn: (t) => d3.interpolateSpectral(1 - t) },
+  "RdBu": { label: "Red → Blue", group: "Classic", fn: (t) => d3.interpolateRdBu(1 - t) },
+  "PuOr": { label: "Purple → Org", group: "Classic", fn: (t) => d3.interpolatePuOr(t) },
+  "BrBG": { label: "Brown → Teal", group: "Classic", fn: (t) => d3.interpolateBrBG(t) },
+  "PRGn": { label: "Purple → Grn", group: "Classic", fn: (t) => d3.interpolatePRGn(t) },
+  "PiYG": { label: "Pink → Green", group: "Classic", fn: (t) => d3.interpolatePiYG(t) },
   // ── Sequential Perceptual ────────────────────────────────────────────
-  "Viridis":   { label: "Viridis",     group: "Sequential", fn: (t) => d3.interpolateViridis(t) },
-  "Plasma":    { label: "Plasma",      group: "Sequential", fn: (t) => d3.interpolatePlasma(t) },
-  "Magma":     { label: "Magma",       group: "Sequential", fn: (t) => d3.interpolateMagma(t) },
-  "Inferno":   { label: "Inferno",     group: "Sequential", fn: (t) => d3.interpolateInferno(t) },
-  "Cividis":   { label: "Cividis",     group: "Sequential", fn: (t) => d3.interpolateCividis(t) },
-  "Turbo":     { label: "Turbo",       group: "Sequential", fn: (t) => d3.interpolateTurbo(t) },
-  "Warm":      { label: "Warm",        group: "Sequential", fn: (t) => d3.interpolateWarm(t) },
-  "Cool":      { label: "Cool",        group: "Sequential", fn: (t) => d3.interpolateCool(t) },
-  "CubeHelix": { label: "CubeHelix",   group: "Sequential", fn: (t) => d3.interpolateCubehelixDefault(t) },
+  "Viridis": { label: "Viridis", group: "Sequential", fn: (t) => d3.interpolateViridis(t) },
+  "Plasma": { label: "Plasma", group: "Sequential", fn: (t) => d3.interpolatePlasma(t) },
+  "Magma": { label: "Magma", group: "Sequential", fn: (t) => d3.interpolateMagma(t) },
+  "Inferno": { label: "Inferno", group: "Sequential", fn: (t) => d3.interpolateInferno(t) },
+  "Cividis": { label: "Cividis", group: "Sequential", fn: (t) => d3.interpolateCividis(t) },
+  "Turbo": { label: "Turbo", group: "Sequential", fn: (t) => d3.interpolateTurbo(t) },
+  "Warm": { label: "Warm", group: "Sequential", fn: (t) => d3.interpolateWarm(t) },
+  "Cool": { label: "Cool", group: "Sequential", fn: (t) => d3.interpolateCool(t) },
+  "CubeHelix": { label: "CubeHelix", group: "Sequential", fn: (t) => d3.interpolateCubehelixDefault(t) },
   // ── Abstract / Artistic ──────────────────────────────────────────────
-  "Ember":     { label: "Ember",       group: "Abstract", fn: piecewise([
-    [0,   [5,   5,   20]],
-    [0.2, [60,  0,   80]],
-    [0.45,[180, 20,  10]],
-    [0.65,[230, 120, 0]],
-    [0.82,[255, 210, 50]],
-    [1,   [255, 255, 240]],
-  ])},
-  "Arctic":    { label: "Arctic",      group: "Abstract", fn: piecewise([
-    [0,   [2,   8,   30]],
-    [0.25,[0,   60,  120]],
-    [0.5, [20,  160, 200]],
-    [0.72,[150, 220, 240]],
-    [0.88,[210, 240, 255]],
-    [1,   [255, 255, 255]],
-  ])},
-  "Acid":      { label: "Acid",        group: "Abstract", fn: piecewise([
-    [0,   [10,  0,   40]],
-    [0.2, [80,  0,   200]],
-    [0.4, [0,   200, 180]],
-    [0.6, [150, 255, 0]],
-    [0.8, [255, 220, 0]],
-    [1,   [255, 80,  200]],
-  ])},
-  "Midnight":  { label: "Midnight",    group: "Abstract", fn: piecewise([
-    [0,   [0,   0,   10]],
-    [0.3, [10,  10,  80]],
-    [0.55,[60,  0,   140]],
-    [0.75,[160, 40,  120]],
-    [0.9, [220, 160, 80]],
-    [1,   [255, 240, 200]],
-  ])},
-  "Moss":      { label: "Moss",        group: "Abstract", fn: piecewise([
-    [0,   [5,   15,  5]],
-    [0.25,[20,  60,  20]],
-    [0.5, [80,  130, 40]],
-    [0.72,[160, 200, 60]],
-    [0.88,[220, 240, 160]],
-    [1,   [255, 255, 230]],
-  ])},
-  "Copper":    { label: "Copper",      group: "Abstract", fn: piecewise([
-    [0,   [10,  4,   0]],
-    [0.3, [80,  30,  5]],
-    [0.55,[180, 80,  20]],
-    [0.75,[210, 140, 60]],
-    [0.9, [240, 200, 120]],
-    [1,   [255, 245, 200]],
-  ])},
-  "Neon":      { label: "Neon",        group: "Abstract", fn: piecewise([
-    [0,   [0,   0,   0]],
-    [0.2, [0,   30,  80]],
-    [0.4, [0,   200, 255]],
-    [0.6, [100, 255, 100]],
-    [0.8, [255, 255, 0]],
-    [1,   [255, 0,   180]],
-  ])},
-  "Dusk":      { label: "Dusk",        group: "Abstract", fn: piecewise([
-    [0,   [8,   5,   30]],
-    [0.25,[60,  20,  80]],
-    [0.5, [180, 60,  80]],
-    [0.72,[220, 130, 80]],
-    [0.88,[240, 200, 120]],
-    [1,   [255, 240, 200]],
-  ])},
-  "Mono":      { label: "Monochrome",  group: "Abstract", fn: (t) => {
-    const v = Math.round(t * 255);
-    return `rgb(${v},${v},${v})`;
-  }},
-  "InvMono":   { label: "Inv. Mono",   group: "Abstract", fn: (t) => {
-    const v = Math.round((1-t) * 255);
-    return `rgb(${v},${v},${v})`;
-  }},
+  "Ember": {
+    label: "Ember", group: "Abstract", fn: piecewise([
+      [0, [5, 5, 20]],
+      [0.2, [60, 0, 80]],
+      [0.45, [180, 20, 10]],
+      [0.65, [230, 120, 0]],
+      [0.82, [255, 210, 50]],
+      [1, [255, 255, 240]],
+    ])
+  },
+  "Arctic": {
+    label: "Arctic", group: "Abstract", fn: piecewise([
+      [0, [2, 8, 30]],
+      [0.25, [0, 60, 120]],
+      [0.5, [20, 160, 200]],
+      [0.72, [150, 220, 240]],
+      [0.88, [210, 240, 255]],
+      [1, [255, 255, 255]],
+    ])
+  },
+  "Acid": {
+    label: "Acid", group: "Abstract", fn: piecewise([
+      [0, [10, 0, 40]],
+      [0.2, [80, 0, 200]],
+      [0.4, [0, 200, 180]],
+      [0.6, [150, 255, 0]],
+      [0.8, [255, 220, 0]],
+      [1, [255, 80, 200]],
+    ])
+  },
+  "Midnight": {
+    label: "Midnight", group: "Abstract", fn: piecewise([
+      [0, [0, 0, 10]],
+      [0.3, [10, 10, 80]],
+      [0.55, [60, 0, 140]],
+      [0.75, [160, 40, 120]],
+      [0.9, [220, 160, 80]],
+      [1, [255, 240, 200]],
+    ])
+  },
+  "Moss": {
+    label: "Moss", group: "Abstract", fn: piecewise([
+      [0, [5, 15, 5]],
+      [0.25, [20, 60, 20]],
+      [0.5, [80, 130, 40]],
+      [0.72, [160, 200, 60]],
+      [0.88, [220, 240, 160]],
+      [1, [255, 255, 230]],
+    ])
+  },
+  "Copper": {
+    label: "Copper", group: "Abstract", fn: piecewise([
+      [0, [10, 4, 0]],
+      [0.3, [80, 30, 5]],
+      [0.55, [180, 80, 20]],
+      [0.75, [210, 140, 60]],
+      [0.9, [240, 200, 120]],
+      [1, [255, 245, 200]],
+    ])
+  },
+  "Neon": {
+    label: "Neon", group: "Abstract", fn: piecewise([
+      [0, [0, 0, 0]],
+      [0.2, [0, 30, 80]],
+      [0.4, [0, 200, 255]],
+      [0.6, [100, 255, 100]],
+      [0.8, [255, 255, 0]],
+      [1, [255, 0, 180]],
+    ])
+  },
+  "Dusk": {
+    label: "Dusk", group: "Abstract", fn: piecewise([
+      [0, [8, 5, 30]],
+      [0.25, [60, 20, 80]],
+      [0.5, [180, 60, 80]],
+      [0.72, [220, 130, 80]],
+      [0.88, [240, 200, 120]],
+      [1, [255, 240, 200]],
+    ])
+  },
+  "Mono": {
+    label: "Monochrome", group: "Abstract", fn: (t) => {
+      const v = Math.round(t * 255);
+      return `rgb(${v},${v},${v})`;
+    }
+  },
+  "InvMono": {
+    label: "Inv. Mono", group: "Abstract", fn: (t) => {
+      const v = Math.round((1 - t) * 255);
+      return `rgb(${v},${v},${v})`;
+    }
+  },
 };
 
 const PALETTE_GROUPS = ["Classic", "Sequential", "Abstract"];
@@ -253,9 +273,9 @@ function renderCanvas(canvas, { recs, cfn, minV, maxV, matMin, matMax, showGrid,
       const val =
         def.length === 4
           ? v00 * (1 - fx) * (1 - fy) +
-            v10 * fx * (1 - fy) +
-            v01 * (1 - fx) * fy +
-            v11 * fx * fy
+          v10 * fx * (1 - fy) +
+          v01 * (1 - fx) * fy +
+          v11 * fx * fy
           : def.reduce((a, b) => a + b, 0) / def.length;
 
       const t = Math.max(0, Math.min(1, (val - minV) / rng));
@@ -652,7 +672,7 @@ export default function YieldCurveApp() {
             display: flex;
             flex-direction: column;
             flex-shrink: 0;
-            height: 50dvh;
+            height: calc(50dvh + env(safe-area-inset-bottom));
             background: #0C0D18;
             border-top: 1px solid rgba(255,255,255,0.08);
             overflow: hidden;
@@ -695,7 +715,7 @@ export default function YieldCurveApp() {
             flex: 1;
             overflow-y: auto;
             overflow-x: hidden;
-            padding: 12px 14px 24px;
+            padding: 12px 14px calc(20px + env(safe-area-inset-bottom));
             -webkit-overflow-scrolling: touch;
             scrollbar-width: none;
           }
@@ -823,9 +843,9 @@ export default function YieldCurveApp() {
             style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
           >
             <svg style={{ height: 22, width: "auto" }} viewBox="-16 -16 528.05 528.05" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="248.02" cy="248.02" r="240.02" fill="none" stroke="#fff" strokeMiterlimit="10" strokeWidth="24"/>
-              <polygon points="414.8 247.47 410.09 270.25 367.27 271.43 339.39 386.13 294.21 385.74 323.68 270.65 258.47 270.65 264.75 247.87 329.57 247.08 365.31 110 410.09 109.6 373.95 247.47 414.8 247.47" fill="#fff"/>
-              <path d="M196.7,262s-16-1-41.88.54c-55.68,3.24-70.22,41-71,63.83-2.4,69.53,84,63.73,109.2-14.34,11.07-34.27,45.19-175.44,46.2-177-36.09-.3-112.1-.45-112.1-.45s2.66-10.16,6.49-23.61l155.25-.25c-.2,1.05-25,106.7-47.43,183.68C215,385.08,146.67,399.39,125,398.4c-34.13-1.54-62.45-27.88-62.45-72.27C62.51,290,92.36,245.7,155.6,246l44.88-.2Z" transform="translate(-1.71 -1.87)" fill="#fff"/>
+              <circle cx="248.02" cy="248.02" r="240.02" fill="none" stroke="#fff" strokeMiterlimit="10" strokeWidth="24" />
+              <polygon points="414.8 247.47 410.09 270.25 367.27 271.43 339.39 386.13 294.21 385.74 323.68 270.65 258.47 270.65 264.75 247.87 329.57 247.08 365.31 110 410.09 109.6 373.95 247.47 414.8 247.47" fill="#fff" />
+              <path d="M196.7,262s-16-1-41.88.54c-55.68,3.24-70.22,41-71,63.83-2.4,69.53,84,63.73,109.2-14.34,11.07-34.27,45.19-175.44,46.2-177-36.09-.3-112.1-.45-112.1-.45s2.66-10.16,6.49-23.61l155.25-.25c-.2,1.05-25,106.7-47.43,183.68C215,385.08,146.67,399.39,125,398.4c-34.13-1.54-62.45-27.88-62.45-72.27C62.51,290,92.36,245.7,155.6,246l44.88-.2Z" transform="translate(-1.71 -1.87)" fill="#fff" />
             </svg>
           </a>
 
@@ -1194,7 +1214,7 @@ export default function YieldCurveApp() {
         <div className="mob-bottom-sheet">
           {/* Tab bar */}
           <div className="mob-tab-bar">
-            {["palette","range","display","data","export"].map((t) => (
+            {["palette", "range", "display", "data", "export"].map((t) => (
               <button
                 key={t}
                 className={`mob-tab${mobTab === t ? " active" : ""}`}
@@ -1331,6 +1351,26 @@ export default function YieldCurveApp() {
                 <button className="primary-btn" style={tok.btnPrimary} onClick={() => setShowPopup(true)}>
                   ↓  EXPORT PNG
                 </button>
+                <div style={{
+                  marginTop: 28,
+                  paddingTop: 16,
+                  borderTop: "1px solid rgba(255,255,255,0.05)",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 5,
+                  textAlign: "center",
+                }}>
+                  <span style={tok.mutedSpan}>Made with ❤️ by Julian Hilgemann</span>
+                  <a
+                    href="https://www.julianhilgemann.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ ...tok.mutedSpan, color: "rgba(255,255,255,0.25)", textDecoration: "none" }}
+                  >
+                    julianhilgemann.com
+                  </a>
+                </div>
               </div>
             )}
 
