@@ -450,8 +450,10 @@ export default function YieldCurveApp() {
     setLoading(true);
     setErrMsg("");
     setProgress(0);
-    const start = `${startYear}-01`, end = `${endYear}-12`;
-    const matsToFetch = ALL_MATS.filter((m) => m >= matMin && m <= matMax);
+    const fetchStartY = 2000;
+    const fetchEndY = new Date().getFullYear();
+    const start = `${fetchStartY}-01`, end = `${fetchEndY}-12`;
+    const matsToFetch = ALL_MATS; // always fetch all
     const all = [];
 
     try {
@@ -465,10 +467,25 @@ export default function YieldCurveApp() {
       if (!all.length) throw new Error("No data returned");
       setRecs(all);
       setDataSource(`Data: Bundesbank`);
+      
+      // Reset view to default
+      setStartYear(fetchStartY);
+      setEndYear(fetchEndY);
+      setMatMin(1);
+      setMatMax(30);
+      setShowGrid(true);
+      setShowLabels(true);
     } catch (err) {
       setErrMsg(`API unavailable (${err.message}). Showing synthetic data.`);
-      setRecs(makeSynthData(startYear, endYear));
+      setRecs(makeSynthData(fetchStartY, fetchEndY));
       setDataSource("Data: Synthetic");
+      
+      setStartYear(fetchStartY);
+      setEndYear(fetchEndY);
+      setMatMin(1);
+      setMatMax(30);
+      setShowGrid(true);
+      setShowLabels(true);
     }
     setLoading(false);
   };
