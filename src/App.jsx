@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import * as d3 from "d3";
+import Slider from "rc-slider";
+import "rc-slider/assets/index.css";
 
 // ── Bundesbank API ────────────────────────────────────────────────────────────
 
@@ -221,11 +223,11 @@ function toRGB(s) {
 
 // ── Canvas Heatmap Renderer ───────────────────────────────────────────────────
 
-function renderCanvas(canvas, { recs, cfn, minV, maxV, matMin, matMax, showGrid, showLabels }) {
+function renderCanvas(canvas, { recs, cfn, minV, maxV, matMin, matMax, showGrid, showLabels, dpr = 1 }) {
   if (!canvas || !recs?.length || minV == null || maxV == null) return;
 
   const ctx = canvas.getContext("2d");
-  const W = canvas.width, H = canvas.height;
+  const W = canvas.width / dpr, H = canvas.height / dpr;
 
   // Padding
   const P = showLabels
@@ -250,13 +252,17 @@ function renderCanvas(canvas, { recs, cfn, minV, maxV, matMin, matMax, showGrid,
   const rng = maxV - minV || 1;
 
   // ── Smooth bilinear interpolation via ImageData ──
-  const img = ctx.createImageData(pw, ph);
+  const physW = Math.round(pw * dpr);
+  const physH = Math.round(ph * dpr);
+  if (physW <= 0 || physH <= 0) return;
+
+  const img = ctx.createImageData(physW, physH);
   const dt = img.data;
 
-  for (let x = 0; x < pw; x++) {
-    for (let y = 0; y < ph; y++) {
-      const gx = (x / (pw - 1)) * (nD - 1);
-      const gy = ((ph - 1 - y) / (ph - 1)) * (nM - 1);
+  for (let x = 0; x < physW; x++) {
+    for (let y = 0; y < physH; y++) {
+      const gx = (x / (physW - 1)) * (nD - 1);
+      const gy = ((physH - 1 - y) / (physH - 1)) * (nM - 1);
 
       const x0 = Math.floor(gx) | 0, x1 = Math.min(x0 + 1, nD - 1);
       const y0 = Math.floor(gy) | 0, y1 = Math.min(y0 + 1, nM - 1);
@@ -280,12 +286,12 @@ function renderCanvas(canvas, { recs, cfn, minV, maxV, matMin, matMax, showGrid,
 
       const t = Math.max(0, Math.min(1, (val - minV) / rng));
       const [r, g, b] = toRGB(cfn(t));
-      const i = (y * pw + x) * 4;
+      const i = (y * physW + x) * 4;
       dt[i] = r; dt[i + 1] = g; dt[i + 2] = b; dt[i + 3] = 255;
     }
   }
 
-  ctx.putImageData(img, P.l, P.t);
+  ctx.putImageData(img, Math.round(P.l * dpr), Math.round(P.t * dpr));
 
   // ── Plot border ──
   ctx.strokeStyle = "rgba(255,255,255,0.08)";
@@ -359,7 +365,7 @@ export default function YieldCurveApp() {
   const [recs, setRecs] = useState(() => makeSynthData(2000, 2025));
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [dataSource, setDataSource] = useState("Synthetic Demo");
+  const [dataSource, setDataSource] = useState("Data: Synthetic");
   const [errMsg, setErrMsg] = useState("");
 
   const [startYear, setStartYear] = useState(2000);
@@ -373,6 +379,7 @@ export default function YieldCurveApp() {
 
   const [tooltip, setTooltip] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [mobTab, setMobTab] = useState("palette");
   const [dims, setDims] = useState({ w: 800, h: 500 });
   const [isMobile, setIsMobile] = useState(false);
@@ -384,19 +391,28 @@ export default function YieldCurveApp() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  const maxDataYear = useMemo(() => {
+    if (!recs?.length) return new Date().getFullYear();
+    const years = recs.map(r => parseInt(r.date.split("-")[0]));
+    return Math.max(...years);
+  }, [recs]);
+
   const { minV, maxV, dates, mats } = useMemo(() => {
     if (!recs?.length) return {};
-    const fr = recs.filter((r) => r.maturity >= matMin && r.maturity <= matMax);
+    const fr = recs.filter((r) => {
+      const y = parseInt(r.date.split("-")[0]);
+      return r.maturity >= matMin && r.maturity <= matMax && y >= startYear && y <= endYear;
+    });
     const vals = fr.map((r) => r.value);
     const dates = [...new Set(fr.map((r) => r.date))].sort();
     const mats = [...new Set(fr.map((r) => r.maturity))].sort((a, b) => a - b);
     return {
-      minV: parseFloat(d3.min(vals).toFixed(3)),
-      maxV: parseFloat(d3.max(vals).toFixed(3)),
+      minV: parseFloat(d3.min(vals)?.toFixed(3) || 0),
+      maxV: parseFloat(d3.max(vals)?.toFixed(3) || 0),
       dates,
       mats,
     };
-  }, [recs, matMin, matMax]);
+  }, [recs, matMin, matMax, startYear, endYear]);
 
   // Resize observer
   useEffect(() => {
@@ -420,8 +436,14 @@ export default function YieldCurveApp() {
     c.style.height = dims.h + "px";
     const ctx = c.getContext("2d");
     ctx.scale(dpr, dpr);
-    renderCanvas(c, { recs, cfn: PALETTES[palette].fn, minV, maxV, matMin, matMax, showGrid, showLabels });
-  }, [recs, dims, palette, matMin, matMax, showGrid, showLabels, minV, maxV]);
+
+    const fr = recs.filter((r) => {
+      const y = parseInt(r.date.split("-")[0]);
+      return r.maturity >= matMin && r.maturity <= matMax && y >= startYear && y <= endYear;
+    });
+
+    renderCanvas(c, { recs: fr, cfn: PALETTES[palette].fn, minV, maxV, matMin, matMax, showGrid, showLabels, dpr });
+  }, [recs, dims, palette, matMin, matMax, showGrid, showLabels, minV, maxV, startYear, endYear]);
 
   // Fetch from Bundesbank
   const handleFetch = async () => {
@@ -442,11 +464,11 @@ export default function YieldCurveApp() {
       }
       if (!all.length) throw new Error("No data returned");
       setRecs(all);
-      setDataSource(`Bundesbank · ${startYear}–${endYear}`);
+      setDataSource(`Data: Bundesbank`);
     } catch (err) {
       setErrMsg(`API unavailable (${err.message}). Showing synthetic data.`);
       setRecs(makeSynthData(startYear, endYear));
-      setDataSource("Synthetic Demo");
+      setDataSource("Data: Synthetic");
     }
     setLoading(false);
   };
@@ -481,32 +503,89 @@ export default function YieldCurveApp() {
 
   // High-res export
   const executeExport = useCallback(() => {
-    const off = document.createElement("canvas");
-    off.width = 2560;
-    off.height = 1440;
-    renderCanvas(off, {
-      recs,
-      cfn: PALETTES[palette].fn,
-      minV,
-      maxV,
-      matMin,
-      matMax,
-      showGrid,
-      showLabels: true,
+    setExporting(true);
+    setTimeout(() => {
+      const off = document.createElement("canvas");
+      off.width = 5120;
+      off.height = 2880;
+      const ctx = off.getContext("2d");
+      ctx.scale(2, 2);
+      
+      // We pass the currently filtered records instead of all records
+      const fr = recs.filter((r) => {
+        const y = parseInt(r.date.split("-")[0]);
+        return r.maturity >= matMin && r.maturity <= matMax && y >= startYear && y <= endYear;
+      });
+
+      renderCanvas(off, {
+        recs: fr,
+        cfn: PALETTES[palette].fn,
+        minV,
+        maxV,
+        matMin,
+        matMax,
+        showGrid: showLabels ? showGrid : false,
+        showLabels,
+        dpr: 2,
+      });
+      off.toBlob((blob) => {
+        if (!blob) {
+          setExporting(false);
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `yield-curve-${palette.toLowerCase()}-${startYear}-${endYear}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => { URL.revokeObjectURL(url); setExporting(false); setShowPopup(false); }, 1000);
+      }, "image/png");
+    }, 50);
+  }, [recs, palette, minV, maxV, matMin, matMax, showGrid, showLabels, startYear, endYear]);
+
+  // CSV Export (Dates as Rows, Maturities as Columns)
+  const executeExportCSV = useCallback(() => {
+    const fr = recs.filter((r) => {
+      const y = parseInt(r.date.split("-")[0]);
+      return r.maturity >= matMin && r.maturity <= matMax && y >= startYear && y <= endYear;
     });
-    off.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `yield-curve-${palette.toLowerCase()}-${startYear}-${endYear}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    }, "image/png");
-    setShowPopup(false);
-  }, [recs, palette, minV, maxV, matMin, matMax, showGrid, startYear, endYear]);
+    
+    // Extract unique sorted dates and maturities from the filtered set
+    const fDates = [...new Set(fr.map(r => r.date))].sort();
+    const fMats = [...new Set(fr.map(r => r.maturity))].sort((a, b) => a - b);
+    
+    // Header row: "Date", then each maturity column
+    const header = ["Date", ...fMats].join(",");
+    
+    // Group records by date for fast lookup
+    const ByDateMat = {};
+    fr.forEach(r => {
+      if (!ByDateMat[r.date]) ByDateMat[r.date] = {};
+      ByDateMat[r.date][r.maturity] = r.value;
+    });
+
+    // Generate rows
+    const rows = fDates.map(d => {
+      const rowVals = fMats.map(m => {
+        const val = ByDateMat[d][m];
+        return val !== undefined ? val.toFixed(2) : "";
+      });
+      return [d, ...rowVals].join(",");
+    });
+
+    const csvContent = [header, ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `yield-curve-data-${startYear}-${endYear}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, [recs, matMin, matMax, startYear, endYear]);
 
   // Color bar gradient CSS string
   const colorBarGrad = useMemo(() => {
@@ -522,13 +601,13 @@ export default function YieldCurveApp() {
     border: "rgba(255,255,255,0.07)",
     accent: "#D4723C",
     accentBlue: "#334C65",
-    text: "#E2E2E8",
-    muted: "rgba(255,255,255,0.35)",
+    text: "#FFFFFF",
+    muted: "#FFFFFF",
     subtle: "rgba(255,255,255,0.08)",
     lbl: {
       fontSize: 10,
       letterSpacing: "0.12em",
-      color: "rgba(255,255,255,0.35)",
+      color: "#FFFFFF",
       textTransform: "uppercase",
       fontWeight: 600,
       marginBottom: 10,
@@ -596,7 +675,8 @@ export default function YieldCurveApp() {
       width: "100%",
       transition: "opacity 0.2s",
     },
-    mutedSpan: { fontSize: 11, color: "rgba(255,255,255,0.35)", lineHeight: 1.55, fontFamily: "Inter, -apple-system, sans-serif" },
+    mutedSpan: { fontSize: 11, color: "#FFFFFF", lineHeight: 1.55, fontFamily: "Inter, -apple-system, sans-serif" },
+    footerSpan: { fontSize: 11, color: "rgba(255,255,255,0.35)", lineHeight: 1.55, fontFamily: "Inter, -apple-system, sans-serif" },
     tTrack: (on) => ({
       width: 34,
       height: 20,
@@ -808,7 +888,7 @@ export default function YieldCurveApp() {
         .range-labels { display: flex; justify-content: space-between; margin-top: 5px; }
         .source-badge {
           font-size: 10px; font-family: "IBM Plex Mono", monospace;
-          color: rgba(255,255,255,0.3); letter-spacing: 0.04em;
+          color: rgba(255,255,255,0.5); letter-spacing: 0.04em;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;
         }
       `}</style>
@@ -874,48 +954,46 @@ export default function YieldCurveApp() {
           {/* Date Range */}
           <div style={tok.section} className="mob-section">
             <div style={tok.lbl}>Date Range</div>
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <div>
-                <div style={{ ...tok.mutedSpan, fontSize: 10, marginBottom: 5, display: "block" }}>From</div>
-                <input
-                  type="number" min={1972} max={2025} value={startYear}
-                  onChange={(e) => setStartYear(+e.target.value)}
-                  style={tok.numIn}
-                />
-              </div>
-              <span style={{ color: "rgba(255,255,255,0.18)", marginTop: 18, fontSize: 14 }}>–</span>
-              <div>
-                <div style={{ ...tok.mutedSpan, fontSize: 10, marginBottom: 5, display: "block" }}>To</div>
-                <input
-                  type="number" min={1972} max={2025} value={endYear}
-                  onChange={(e) => setEndYear(+e.target.value)}
-                  style={tok.numIn}
-                />
-              </div>
+            <div style={{ padding: "0 8px 10px" }}>
+              <Slider
+                range
+                min={2000}
+                max={maxDataYear}
+                value={[startYear, Math.min(endYear, maxDataYear)]}
+                onChange={(val) => { setStartYear(val[0]); setEndYear(val[1]); }}
+                styles={{
+                  track: { backgroundColor: '#D4723C' },
+                  handle: { borderColor: '#D4723C', backgroundColor: '#FFF', opacity: 1 },
+                  rail: { backgroundColor: 'rgba(255,255,255,0.1)' }
+                }}
+              />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#FFF", fontFamily: '"IBM Plex Mono", monospace' }}>
+              <span>{startYear}</span>
+              <span>{endYear}</span>
             </div>
           </div>
 
           {/* Maturity */}
           <div style={tok.section} className="mob-section">
             <div style={tok.lbl}>Maturity Range</div>
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <div>
-                <div style={{ ...tok.mutedSpan, fontSize: 10, marginBottom: 5, display: "block" }}>Min</div>
-                <select value={matMin} onChange={(e) => setMatMin(+e.target.value)} style={{ ...tok.sel, width: 80 }}>
-                  {ALL_MATS.filter((m) => m < matMax).map((m) => (
-                    <option key={m} value={m}>{m}Y</option>
-                  ))}
-                </select>
-              </div>
-              <span style={{ color: "rgba(255,255,255,0.18)", marginTop: 18, fontSize: 14 }}>–</span>
-              <div>
-                <div style={{ ...tok.mutedSpan, fontSize: 10, marginBottom: 5, display: "block" }}>Max</div>
-                <select value={matMax} onChange={(e) => setMatMax(+e.target.value)} style={{ ...tok.sel, width: 80 }}>
-                  {ALL_MATS.filter((m) => m > matMin).map((m) => (
-                    <option key={m} value={m}>{m}Y</option>
-                  ))}
-                </select>
-              </div>
+            <div style={{ padding: "0 8px 10px" }}>
+              <Slider
+                range
+                min={1}
+                max={30}
+                value={[matMin, matMax]}
+                onChange={(val) => { setMatMin(val[0]); setMatMax(val[1]); }}
+                styles={{
+                  track: { backgroundColor: '#D4723C' },
+                  handle: { borderColor: '#D4723C', backgroundColor: '#FFF', opacity: 1 },
+                  rail: { backgroundColor: 'rgba(255,255,255,0.1)' }
+                }}
+              />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#FFF", fontFamily: '"IBM Plex Mono", monospace' }}>
+              <span>{matMin}Y</span>
+              <span>{matMax}Y</span>
             </div>
           </div>
 
@@ -996,20 +1074,21 @@ export default function YieldCurveApp() {
             <div style={tok.lbl}>Display</div>
             <div
               className="toggle-row"
-              onClick={() => setShowGrid((v) => !v)}
-            >
-              <span style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: 500 }}>Grid Lines</span>
-              <div style={tok.tTrack(showGrid)}>
-                <div style={tok.tThumb(showGrid)} />
-              </div>
-            </div>
-            <div
-              className="toggle-row"
               onClick={() => setShowLabels((v) => !v)}
             >
               <span style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: 500 }}>Axis Labels</span>
               <div style={tok.tTrack(showLabels)}>
                 <div style={tok.tThumb(showLabels)} />
+              </div>
+            </div>
+            <div
+              className="toggle-row"
+              onClick={() => { if (showLabels) setShowGrid((v) => !v); }}
+              style={{ opacity: showLabels ? 1 : 0.4, pointerEvents: showLabels ? "auto" : "none" }}
+            >
+              <span style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: 500 }}>Grid Lines</span>
+              <div style={tok.tTrack(showGrid && showLabels)}>
+                <div style={tok.tThumb(showGrid && showLabels)} />
               </div>
             </div>
           </div>
@@ -1044,14 +1123,22 @@ export default function YieldCurveApp() {
           {/* Export */}
           <div style={{ ...tok.section, borderBottom: "none" }} className="mob-section">
             <div style={tok.lbl}>Export</div>
-            <p style={{ ...tok.mutedSpan, marginBottom: 12 }}>2560 × 1440 PNG, high-resolution</p>
-            <button
-              className="primary-btn"
-              style={tok.btnPrimary}
-              onClick={() => setShowPopup(true)}
-            >
-              ↓  EXPORT PNG
-            </button>
+            <p style={{ ...tok.mutedSpan, marginBottom: 12 }}>Download chart or data</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
+              <button
+                className="primary-btn"
+                style={{ ...tok.btnPrimary, width: "100%" }}
+                onClick={() => setShowPopup(true)}
+              >
+                ↓  EXPORT PNG
+              </button>
+              <span
+                style={{ ...tok.mutedSpan, fontSize: 13, textDecoration: "underline", cursor: "pointer", opacity: 0.8 }}
+                onClick={executeExportCSV}
+              >
+                Export CSV Data (Matrix)
+              </span>
+            </div>
           </div>
 
           {/* Footer */}
@@ -1068,12 +1155,12 @@ export default function YieldCurveApp() {
               borderTop: "1px solid rgba(255,255,255,0.05)",
             }}
           >
-            <span style={tok.mutedSpan}>Made with ❤️ by Julian Hilgemann</span>
+            <span style={tok.footerSpan}>Made with ❤️ by Julian Hilgemann</span>
             <a
               href="https://www.julianhilgemann.com"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ ...tok.mutedSpan, color: "rgba(255,255,255,0.3)", textDecoration: "none" }}
+              style={{ ...tok.footerSpan, color: "rgba(255,255,255,0.3)", textDecoration: "none" }}
             >
               julianhilgemann.com
             </a>
@@ -1129,7 +1216,7 @@ export default function YieldCurveApp() {
                 lineHeight: 1.1,
               }}
             >
-              {tooltip.value.toFixed(3)}
+              {tooltip.value.toFixed(2)}
               <span style={{ fontSize: 13, fontWeight: 400, color: "rgba(255,255,255,0.45)", marginLeft: 2 }}>%</span>
             </div>
             <div style={{ marginTop: 6, height: 3, width: 100, borderRadius: 2, background: colorBarGrad, opacity: 0.7 }} />
@@ -1156,12 +1243,22 @@ export default function YieldCurveApp() {
               >
                 ☕
               </div>
-              <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700, color: "#fff" }}>
-                Support my work
+              <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", gap: 8 }}>
+                {exporting && (
+                  <div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#FFF", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                )}
+                {exporting ? "Exporting..." : "Support my work"}
               </h3>
-              <p style={{ margin: "0 0 24px", fontSize: 14, color: "rgba(255,255,255,0.55)", lineHeight: 1.65 }}>
-                If this tool has been useful for your research or work, consider buying me a coffee to support continued development!
-              </p>
+              <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+              {exporting ? (
+                <p style={{ margin: "0 0 24px", fontSize: 14, color: "rgba(255,255,255,0.55)", lineHeight: 1.65 }}>
+                  Calculating 14.7M pixels, this may take a few seconds.
+                </p>
+              ) : (
+                <p style={{ margin: "0 0 24px", fontSize: 14, color: "rgba(255,255,255,0.55)", lineHeight: 1.65 }}>
+                  If this tool has been useful for your research or work, consider buying me a coffee to support continued development!
+                </p>
+              )}
               <div style={{ display: "flex", gap: 10 }}>
                 <button
                   style={{
@@ -1172,38 +1269,43 @@ export default function YieldCurveApp() {
                     padding: "12px 0",
                     color: "rgba(255,255,255,0.75)",
                     fontSize: 13,
-                    cursor: "pointer",
+                    cursor: exporting ? "not-allowed" : "pointer",
                     fontFamily: "Inter, sans-serif",
                     transition: "background 0.2s",
+                    opacity: exporting ? 0.6 : 1,
                   }}
                   onClick={executeExport}
+                  disabled={exporting}
                 >
-                  Just Download
+                  {exporting ? "Wait..." : "Just Download"}
                 </button>
                 <a
                   href="https://buymeacoffee.com/julianhilgemann"
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => !exporting && executeExport()}
                   style={{
-                    flex: 1,
-                    background: "#FFDD00",
-                    color: "#000",
-                    borderRadius: 10,
-                    padding: "12px 0",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    textDecoration: "none",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 6,
-                    fontFamily: "Inter, sans-serif",
-                    boxShadow: "0 2px 12px rgba(255,221,0,0.25)",
+                    ...{
+                      flex: 1,
+                      background: "#FFDD00",
+                      color: "#000",
+                      borderRadius: 10,
+                      padding: "12px 0",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: exporting ? "not-allowed" : "pointer",
+                      textDecoration: "none",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                      fontFamily: "Inter, sans-serif",
+                      boxShadow: "0 2px 12px rgba(255,221,0,0.25)",
+                    },
+                    ...(exporting ? { opacity: 0.6 } : {})
                   }}
-                  onClick={executeExport}
                 >
-                  ☕ Buy me a coffee
+                  ☕ {exporting ? "Wait..." : "Buy me a coffee"}
                 </a>
               </div>
             </div>
@@ -1271,36 +1373,44 @@ export default function YieldCurveApp() {
               <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                 <div>
                   <div style={tok.lbl}>Date Range</div>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                    <div>
-                      <div style={{ ...tok.mutedSpan, fontSize: 10, marginBottom: 5, display: "block" }}>From</div>
-                      <input type="number" min={1972} max={2025} value={startYear}
-                        onChange={(e) => setStartYear(+e.target.value)} style={{ ...tok.numIn, width: 80 }} />
-                    </div>
-                    <span style={{ color: "rgba(255,255,255,0.2)", marginTop: 18 }}>–</span>
-                    <div>
-                      <div style={{ ...tok.mutedSpan, fontSize: 10, marginBottom: 5, display: "block" }}>To</div>
-                      <input type="number" min={1972} max={2025} value={endYear}
-                        onChange={(e) => setEndYear(+e.target.value)} style={{ ...tok.numIn, width: 80 }} />
-                    </div>
+                  <div style={{ padding: "0 8px 10px" }}>
+                    <Slider
+                      range
+                      min={2000}
+                      max={maxDataYear}
+                      value={[startYear, Math.min(endYear, maxDataYear)]}
+                      onChange={(val) => { setStartYear(val[0]); setEndYear(val[1]); }}
+                      styles={{
+                        track: { backgroundColor: '#D4723C' },
+                        handle: { borderColor: '#D4723C', backgroundColor: '#FFF', opacity: 1 },
+                        rail: { backgroundColor: 'rgba(255,255,255,0.1)' }
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#FFF", fontFamily: '"IBM Plex Mono", monospace' }}>
+                    <span>{startYear}</span>
+                    <span>{endYear}</span>
                   </div>
                 </div>
                 <div>
                   <div style={tok.lbl}>Maturity Range</div>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                    <div>
-                      <div style={{ ...tok.mutedSpan, fontSize: 10, marginBottom: 5, display: "block" }}>Min</div>
-                      <select value={matMin} onChange={(e) => setMatMin(+e.target.value)} style={{ ...tok.sel, width: 80 }}>
-                        {ALL_MATS.filter((m) => m < matMax).map((m) => <option key={m} value={m}>{m}Y</option>)}
-                      </select>
-                    </div>
-                    <span style={{ color: "rgba(255,255,255,0.2)", marginTop: 18 }}>–</span>
-                    <div>
-                      <div style={{ ...tok.mutedSpan, fontSize: 10, marginBottom: 5, display: "block" }}>Max</div>
-                      <select value={matMax} onChange={(e) => setMatMax(+e.target.value)} style={{ ...tok.sel, width: 80 }}>
-                        {ALL_MATS.filter((m) => m > matMin).map((m) => <option key={m} value={m}>{m}Y</option>)}
-                      </select>
-                    </div>
+                  <div style={{ padding: "0 8px 10px" }}>
+                    <Slider
+                      range
+                      min={1}
+                      max={30}
+                      value={[matMin, matMax]}
+                      onChange={(val) => { setMatMin(val[0]); setMatMax(val[1]); }}
+                      styles={{
+                        track: { backgroundColor: '#D4723C' },
+                        handle: { borderColor: '#D4723C', backgroundColor: '#FFF', opacity: 1 },
+                        rail: { backgroundColor: 'rgba(255,255,255,0.1)' }
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#FFF", fontFamily: '"IBM Plex Mono", monospace' }}>
+                    <span>{matMin}Y</span>
+                    <span>{matMax}Y</span>
                   </div>
                 </div>
               </div>
@@ -1310,13 +1420,13 @@ export default function YieldCurveApp() {
             {mobTab === "display" && (
               <div>
                 <div style={tok.lbl}>Display Options</div>
-                <div className="toggle-row" onClick={() => setShowGrid((v) => !v)}>
-                  <span style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", fontWeight: 500 }}>Grid Lines</span>
-                  <div style={tok.tTrack(showGrid)}><div style={tok.tThumb(showGrid)} /></div>
-                </div>
                 <div className="toggle-row" onClick={() => setShowLabels((v) => !v)}>
                   <span style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", fontWeight: 500 }}>Axis Labels</span>
                   <div style={tok.tTrack(showLabels)}><div style={tok.tThumb(showLabels)} /></div>
+                </div>
+                <div className="toggle-row" onClick={() => { if (showLabels) setShowGrid((v) => !v); }} style={{ opacity: showLabels ? 1 : 0.4, pointerEvents: showLabels ? "auto" : "none" }}>
+                  <span style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", fontWeight: 500 }}>Grid Lines</span>
+                  <div style={tok.tTrack(showGrid && showLabels)}><div style={tok.tThumb(showGrid && showLabels)} /></div>
                 </div>
               </div>
             )}
@@ -1325,6 +1435,9 @@ export default function YieldCurveApp() {
             {mobTab === "data" && (
               <div>
                 <div style={tok.lbl}>Live Data</div>
+                <div style={{ marginBottom: 16, display: "inline-block", padding: "4px 8px", background: "rgba(255,255,255,0.06)", borderRadius: 4, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace', color: "rgba(255,255,255,0.7)" }}>
+                  Current: {dataSource}
+                </div>
                 <p style={{ ...tok.mutedSpan, marginBottom: 14, lineHeight: 1.6 }}>
                   Fetches Bundesbank BBSIS Svensson curve (1–30Y monthly). Falls back to synthetic if unavailable.
                 </p>
@@ -1347,33 +1460,45 @@ export default function YieldCurveApp() {
             {mobTab === "export" && (
               <div>
                 <div style={tok.lbl}>Export</div>
-                <p style={{ ...tok.mutedSpan, marginBottom: 14 }}>2560 × 1440 PNG, high-resolution</p>
-                <button className="primary-btn" style={tok.btnPrimary} onClick={() => setShowPopup(true)}>
-                  ↓  EXPORT PNG
-                </button>
-                <div style={{
-                  marginTop: 28,
-                  paddingTop: 16,
-                  borderTop: "1px solid rgba(255,255,255,0.05)",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 5,
-                  textAlign: "center",
-                }}>
-                  <span style={tok.mutedSpan}>Made with ❤️ by Julian Hilgemann</span>
-                  <a
-                    href="https://www.julianhilgemann.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ ...tok.mutedSpan, color: "rgba(255,255,255,0.25)", textDecoration: "none" }}
+                <p style={{ ...tok.mutedSpan, marginBottom: 14 }}>Download chart or data</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
+                  <button className="primary-btn" style={{ ...tok.btnPrimary, width: "100%" }} onClick={() => setShowPopup(true)}>
+                    ↓  EXPORT PNG
+                  </button>
+                  <span
+                    style={{ ...tok.mutedSpan, fontSize: 13, textDecoration: "underline", cursor: "pointer", opacity: 0.8 }}
+                    onClick={executeExportCSV}
                   >
-                    julianhilgemann.com
-                  </a>
+                    Export CSV Data (Matrix)
+                  </span>
                 </div>
               </div>
             )}
 
+          </div>
+
+          {/* Mobile Footer - Always visible at bottom of sheet */}
+          <div style={{
+            padding: "12px 20px",
+            borderTop: "1px solid rgba(255,255,255,0.05)",
+            background: "#0C0D18",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 4,
+            textAlign: "center",
+            flexShrink: 0,
+            paddingBottom: "calc(12px + env(safe-area-inset-bottom))",
+          }}>
+            <span style={tok.footerSpan}>Made with ❤️ by Julian Hilgemann</span>
+            <a
+              href="https://www.julianhilgemann.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ ...tok.footerSpan, color: "rgba(255,255,255,0.25)", textDecoration: "none" }}
+            >
+              julianhilgemann.com
+            </a>
           </div>
         </div>
 
