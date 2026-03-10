@@ -223,7 +223,7 @@ function toRGB(s) {
 
 // ── Canvas Heatmap Renderer ───────────────────────────────────────────────────
 
-function renderCanvas(canvas, { recs, cfn, minV, maxV, matMin, matMax, showGrid, showLabels, dpr = 1 }) {
+function renderCanvas(canvas, { recs, cfn, minV, maxV, matMin, matMax, showGrid, showLabels, dpr = 1, isMobile = false }) {
   if (!canvas || !recs?.length || minV == null || maxV == null) return;
 
   const ctx = canvas.getContext("2d");
@@ -344,7 +344,8 @@ function renderCanvas(canvas, { recs, cfn, minV, maxV, matMin, matMax, showGrid,
   // Y: maturity labels
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
-  [1, 2, 3, 5, 7, 10, 15, 20, 25, 30].filter((m) => m >= matMin && m <= matMax).forEach((mat) => {
+  const yTicks = isMobile ? [1, 5, 10, 30] : [1, 2, 3, 5, 7, 10, 15, 20, 25, 30];
+  yTicks.filter((m) => m >= matMin && m <= matMax).forEach((mat) => {
     const mi = mats.indexOf(mat);
     if (mi < 0) return;
     const yp = P.t + ph - (mi / (nM - 1)) * ph;
@@ -442,8 +443,8 @@ export default function YieldCurveApp() {
       return r.maturity >= matMin && r.maturity <= matMax && y >= startYear && y <= endYear;
     });
 
-    renderCanvas(c, { recs: fr, cfn: PALETTES[palette].fn, minV, maxV, matMin, matMax, showGrid, showLabels, dpr });
-  }, [recs, dims, palette, matMin, matMax, showGrid, showLabels, minV, maxV, startYear, endYear]);
+    renderCanvas(c, { recs: fr, cfn: PALETTES[palette].fn, minV, maxV, matMin, matMax, showGrid, showLabels, dpr, isMobile });
+  }, [recs, dims, palette, matMin, matMax, showGrid, showLabels, minV, maxV, startYear, endYear, isMobile]);
 
   // Fetch from Bundesbank
   const handleFetch = async () => {
@@ -544,6 +545,7 @@ export default function YieldCurveApp() {
         showGrid: showLabels ? showGrid : false,
         showLabels,
         dpr: 2,
+        isMobile: false, // export is always full res
       });
       off.toBlob((blob) => {
         if (!blob) {
@@ -1124,7 +1126,7 @@ export default function YieldCurveApp() {
                 <div className="progress-bar-wrap">
                   <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
                 </div>
-                <span style={tok.mutedSpan}>Fetching maturities… {progress}%</span>
+                <span style={tok.mutedSpan}>Fetching maturities…</span>
               </div>
             )}
             <button
