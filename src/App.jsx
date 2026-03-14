@@ -223,7 +223,7 @@ function toRGB(s) {
 
 // ── Canvas Heatmap Renderer ───────────────────────────────────────────────────
 
-function renderCanvas(canvas, { recs, cfn, minV, maxV, matMin, matMax, showGrid, showLabels, dpr = 1, isMobile = false }) {
+function renderCanvas(canvas, { recs, cfn, minV, maxV, colorMode = "global", maxAbsInv = 0, matMin, matMax, showGrid, showLabels, dpr = 1, isMobile = false }) {
   if (!canvas || !recs?.length || minV == null || maxV == null) return;
 
   const ctx = canvas.getContext("2d");
@@ -248,8 +248,31 @@ function renderCanvas(canvas, { recs, cfn, minV, maxV, matMin, matMax, showGrid,
 
   if (!nD || !nM || pw <= 0 || ph <= 0) return;
 
-  const lk = new Map(fr.map((r) => [`${r.date}|${r.maturity}`, r.value]));
-  const rng = maxV - minV || 1;
+  const lk = new Map();
+  if (colorMode === "inversion") {
+    const maxMatPerDate = {};
+    fr.forEach((r) => {
+      if (!maxMatPerDate[r.date] || r.maturity > maxMatPerDate[r.date]) {
+        maxMatPerDate[r.date] = r.maturity;
+      }
+    });
+    const yieldLk = new Map(fr.map((r) => [`${r.date}|${r.maturity}`, r.value]));
+    fr.forEach((r) => {
+      const longYield = yieldLk.get(`${r.date}|${maxMatPerDate[r.date]}`);
+      if (longYield !== undefined) lk.set(`${r.date}|${r.maturity}`, r.value - longYield);
+    });
+  } else {
+    fr.forEach((r) => lk.set(`${r.date}|${r.maturity}`, r.value));
+  }
+
+  let rng, baseMin;
+  if (colorMode === "inversion") {
+    rng = (maxAbsInv * 2) || 1;
+    baseMin = -maxAbsInv;
+  } else {
+    rng = maxV - minV || 1;
+    baseMin = minV;
+  }
 
   // ── Smooth bilinear interpolation via ImageData ──
   const physW = Math.round(pw * dpr);
@@ -284,7 +307,7 @@ function renderCanvas(canvas, { recs, cfn, minV, maxV, matMin, matMax, showGrid,
           v11 * fx * fy
           : def.reduce((a, b) => a + b, 0) / def.length;
 
-      const t = Math.max(0, Math.min(1, (val - minV) / rng));
+      const t = Math.max(0, Math.min(1, (val - baseMin) / rng));
       const [r, g, b] = toRGB(cfn(t));
       const i = (y * physW + x) * 4;
       dt[i] = r; dt[i + 1] = g; dt[i + 2] = b; dt[i + 3] = 255;
@@ -363,6 +386,7 @@ export default function YieldCurveApp() {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
 
+  const [colorMode, setColorMode] = useState("global");
   const [recs, setRecs] = useState(() => makeSynthData(2000, 2025));
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -398,18 +422,42 @@ export default function YieldCurveApp() {
     return Math.max(...years);
   }, [recs]);
 
-  const { minV, maxV, dates, mats } = useMemo(() => {
+  const { minV, maxV, maxAbsInv, dates, mats } = useMemo(() => {
     if (!recs?.length) return {};
     const fr = recs.filter((r) => {
       const y = parseInt(r.date.split("-")[0]);
       return r.maturity >= matMin && r.maturity <= matMax && y >= startYear && y <= endYear;
     });
+
+    const maxMatPerDate = {};
+    fr.forEach((r) => {
+      if (!maxMatPerDate[r.date] || r.maturity > maxMatPerDate[r.date]) {
+        maxMatPerDate[r.date] = r.maturity;
+      }
+    });
+
+    const lk = {};
+    fr.forEach((r) => {
+      if (!lk[r.date]) lk[r.date] = {};
+      lk[r.date][r.maturity] = r.value;
+    });
+
+    let maxInv = 0;
+    fr.forEach((r) => {
+      const longYield = lk[r.date]?.[maxMatPerDate[r.date]];
+      if (longYield !== undefined) {
+        const inv = r.value - longYield; // positive means inverted
+        if (Math.abs(inv) > maxInv) maxInv = Math.abs(inv);
+      }
+    });
+
     const vals = fr.map((r) => r.value);
     const dates = [...new Set(fr.map((r) => r.date))].sort();
     const mats = [...new Set(fr.map((r) => r.maturity))].sort((a, b) => a - b);
     return {
       minV: parseFloat(d3.min(vals)?.toFixed(3) || 0),
       maxV: parseFloat(d3.max(vals)?.toFixed(3) || 0),
+      maxAbsInv: maxInv,
       dates,
       mats,
     };
@@ -443,8 +491,8 @@ export default function YieldCurveApp() {
       return r.maturity >= matMin && r.maturity <= matMax && y >= startYear && y <= endYear;
     });
 
-    renderCanvas(c, { recs: fr, cfn: PALETTES[palette].fn, minV, maxV, matMin, matMax, showGrid, showLabels, dpr, isMobile });
-  }, [recs, dims, palette, matMin, matMax, showGrid, showLabels, minV, maxV, startYear, endYear, isMobile]);
+    renderCanvas(c, { recs: fr, cfn: PALETTES[palette].fn, minV, maxV, colorMode, maxAbsInv, matMin, matMax, showGrid, showLabels, dpr, isMobile });
+  }, [recs, dims, palette, matMin, matMax, showGrid, showLabels, minV, maxV, colorMode, maxAbsInv, startYear, endYear, isMobile]);
 
   // Fetch from Bundesbank
   const handleFetch = async () => {
@@ -514,9 +562,18 @@ export default function YieldCurveApp() {
 
       const date = dates[di], mat = mats[mi];
       const rec = recs.find((r) => r.date === date && r.maturity === mat);
-      setTooltip(rec ? { x: e.clientX, y: e.clientY, date, mat, value: rec.value } : null);
+
+      let spread;
+      if (colorMode === "inversion" && rec) {
+        const sameDateRecs = recs.filter((r) => r.date === date && r.maturity >= matMin && r.maturity <= matMax);
+        const maxM = Math.max(...sameDateRecs.map((r) => r.maturity));
+        const longEnd = sameDateRecs.find((r) => r.maturity === maxM);
+        if (longEnd) spread = rec.value - longEnd.value;
+      }
+
+      setTooltip(rec ? { x: e.clientX, y: e.clientY, date, mat, value: rec.value, spread } : null);
     },
-    [dates, mats, recs, showLabels]
+    [dates, mats, recs, showLabels, colorMode, matMin, matMax]
   );
 
   // High-res export
@@ -540,6 +597,8 @@ export default function YieldCurveApp() {
         cfn: PALETTES[palette].fn,
         minV,
         maxV,
+        colorMode,
+        maxAbsInv,
         matMin,
         matMax,
         showGrid: showLabels ? showGrid : false,
@@ -562,7 +621,7 @@ export default function YieldCurveApp() {
         setTimeout(() => { URL.revokeObjectURL(url); setExporting(false); setShowPopup(false); }, 1000);
       }, "image/png");
     }, 50);
-  }, [recs, palette, minV, maxV, matMin, matMax, showGrid, showLabels, startYear, endYear]);
+  }, [recs, palette, minV, maxV, colorMode, maxAbsInv, matMin, matMax, showGrid, showLabels, startYear, endYear]);
 
   // CSV Export (Dates as Rows, Maturities as Columns)
   const executeExportCSV = useCallback(() => {
@@ -970,6 +1029,58 @@ export default function YieldCurveApp() {
           }}
         >
 
+          {/* Coloring Mode */}
+          <div style={tok.section} className="mob-section">
+            <div style={tok.lbl}>Coloring Mode</div>
+            <div style={{ display: "flex", gap: 6, padding: "0 0 10px" }}>
+              <button
+                style={{
+                  flex: 1,
+                  background: colorMode === "global" ? "rgba(255,255,255,0.12)" : "transparent",
+                  border: "1px solid",
+                  borderColor: colorMode === "global" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.07)",
+                  borderRadius: 6,
+                  color: colorMode === "global" ? "#fff" : "rgba(255,255,255,0.35)",
+                  padding: "6px 0",
+                  fontSize: 11,
+                  fontWeight: colorMode === "global" ? 600 : 400,
+                  cursor: "pointer",
+                  letterSpacing: "0.02em",
+                  fontFamily: "Inter, sans-serif",
+                  transition: "all 0.15s",
+                }}
+                onClick={() => setColorMode("global")}
+              >
+                Global Yield
+              </button>
+              <button
+                style={{
+                  flex: 1,
+                  background: colorMode === "inversion" ? "rgba(255,255,255,0.12)" : "transparent",
+                  border: "1px solid",
+                  borderColor: colorMode === "inversion" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.07)",
+                  borderRadius: 6,
+                  color: colorMode === "inversion" ? "#fff" : "rgba(255,255,255,0.35)",
+                  padding: "6px 0",
+                  fontSize: 11,
+                  fontWeight: colorMode === "inversion" ? 600 : 400,
+                  cursor: "pointer",
+                  letterSpacing: "0.02em",
+                  fontFamily: "Inter, sans-serif",
+                  transition: "all 0.15s",
+                }}
+                onClick={() => setColorMode("inversion")}
+              >
+                Inversion
+              </button>
+            </div>
+            <p style={{ ...tok.mutedSpan, fontSize: 10, opacity: 0.6, lineHeight: 1.4 }}>
+              {colorMode === "global"
+                ? "Colors represent absolute yield values."
+                : "Colors represent the yield spread relative to the longest available maturity (curve inversion)."}
+            </p>
+          </div>
+
           {/* Date Range */}
           <div style={tok.section} className="mob-section">
             <div style={tok.lbl}>Date Range</div>
@@ -1082,9 +1193,9 @@ export default function YieldCurveApp() {
             </div>
             {/* Selected range display */}
             <div className="range-labels" style={{ marginTop: 10 }}>
-              <span style={tok.mutedSpan}>{minV != null ? `${minV.toFixed(2)}%` : "—"}</span>
-              <span style={{ ...tok.mutedSpan, fontFamily: '"IBM Plex Mono", monospace', fontSize: 10 }}>yield %</span>
-              <span style={tok.mutedSpan}>{maxV != null ? `${maxV.toFixed(2)}%` : "—"}</span>
+              <span style={tok.mutedSpan}>{colorMode === "global" ? (minV != null ? `${minV.toFixed(2)}%` : "—") : (maxAbsInv ? `-${maxAbsInv.toFixed(2)}%` : "—")}</span>
+              <span style={{ ...tok.mutedSpan, fontFamily: '"IBM Plex Mono", monospace', fontSize: 10 }}>{colorMode === "global" ? "yield %" : "inversion spread"}</span>
+              <span style={tok.mutedSpan}>{colorMode === "global" ? (maxV != null ? `${maxV.toFixed(2)}%` : "—") : (maxAbsInv ? `+${maxAbsInv.toFixed(2)}%` : "—")}</span>
             </div>
           </div>
 
@@ -1238,6 +1349,11 @@ export default function YieldCurveApp() {
               {tooltip.value.toFixed(2)}
               <span style={{ fontSize: 13, fontWeight: 400, color: "rgba(255,255,255,0.45)", marginLeft: 2 }}>%</span>
             </div>
+            {colorMode === "inversion" && tooltip.spread !== undefined && (
+              <div style={{ fontSize: 12, fontWeight: 500, color: tooltip.spread > 0 ? "#F87171" : "#4ADE80", marginTop: 4, fontFamily: '"IBM Plex Mono", monospace' }}>
+                Spread: {tooltip.spread > 0 ? "+" : ""}{tooltip.spread.toFixed(2)}%
+              </div>
+            )}
             <div style={{ marginTop: 6, height: 3, width: 100, borderRadius: 2, background: colorBarGrad, opacity: 0.7 }} />
           </div>
         )}
@@ -1380,9 +1496,9 @@ export default function YieldCurveApp() {
                 </div>
                 {/* Range */}
                 <div className="range-labels" style={{ marginTop: 12 }}>
-                  <span style={tok.mutedSpan}>{minV != null ? `${minV.toFixed(2)}%` : "—"}</span>
-                  <span style={{ ...tok.mutedSpan, fontFamily: '"IBM Plex Mono", monospace', fontSize: 10 }}>yield %</span>
-                  <span style={tok.mutedSpan}>{maxV != null ? `${maxV.toFixed(2)}%` : "—"}</span>
+                  <span style={tok.mutedSpan}>{colorMode === "global" ? (minV != null ? `${minV.toFixed(2)}%` : "—") : (maxAbsInv ? `-${maxAbsInv.toFixed(2)}%` : "—")}</span>
+                  <span style={{ ...tok.mutedSpan, fontFamily: '"IBM Plex Mono", monospace', fontSize: 10 }}>{colorMode === "global" ? "yield %" : "inversion spread"}</span>
+                  <span style={tok.mutedSpan}>{colorMode === "global" ? (maxV != null ? `${maxV.toFixed(2)}%` : "—") : (maxAbsInv ? `+${maxAbsInv.toFixed(2)}%` : "—")}</span>
                 </div>
               </div>
             )}
@@ -1390,6 +1506,56 @@ export default function YieldCurveApp() {
             {/* RANGE tab */}
             {mobTab === "range" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                <div>
+                  <div style={tok.lbl}>Coloring Mode</div>
+                  <div style={{ display: "flex", gap: 6, padding: "0 0 10px" }}>
+                    <button
+                      style={{
+                        flex: 1,
+                        background: colorMode === "global" ? "rgba(255,255,255,0.12)" : "transparent",
+                        border: "1px solid",
+                        borderColor: colorMode === "global" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.07)",
+                        borderRadius: 6,
+                        color: colorMode === "global" ? "#fff" : "rgba(255,255,255,0.35)",
+                        padding: "6px 0",
+                        fontSize: 11,
+                        fontWeight: colorMode === "global" ? 600 : 400,
+                        cursor: "pointer",
+                        letterSpacing: "0.02em",
+                        fontFamily: "Inter, sans-serif",
+                        transition: "all 0.15s",
+                      }}
+                      onClick={() => setColorMode("global")}
+                    >
+                      Global Yield
+                    </button>
+                    <button
+                      style={{
+                        flex: 1,
+                        background: colorMode === "inversion" ? "rgba(255,255,255,0.12)" : "transparent",
+                        border: "1px solid",
+                        borderColor: colorMode === "inversion" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.07)",
+                        borderRadius: 6,
+                        color: colorMode === "inversion" ? "#fff" : "rgba(255,255,255,0.35)",
+                        padding: "6px 0",
+                        fontSize: 11,
+                        fontWeight: colorMode === "inversion" ? 600 : 400,
+                        cursor: "pointer",
+                        letterSpacing: "0.02em",
+                        fontFamily: "Inter, sans-serif",
+                        transition: "all 0.15s",
+                      }}
+                      onClick={() => setColorMode("inversion")}
+                    >
+                      Inversion
+                    </button>
+                  </div>
+                  <p style={{ ...tok.mutedSpan, fontSize: 10, opacity: 0.6, lineHeight: 1.4 }}>
+                    {colorMode === "global"
+                      ? "Colors represent absolute yield values."
+                      : "Colors represent the yield spread relative to the longest available maturity (curve inversion)."}
+                  </p>
+                </div>
                 <div>
                   <div style={tok.lbl}>Date Range</div>
                   <div style={{ padding: "0 8px 10px" }}>
