@@ -223,7 +223,7 @@ function toRGB(s) {
 
 // ── Canvas Heatmap Renderer ───────────────────────────────────────────────────
 
-function renderCanvas(canvas, { recs, cfn, minV, maxV, colorMode = "global", maxAbsInv = 0, matMin, matMax, showGrid, showLabels, dpr = 1, isMobile = false }) {
+function renderCanvas(canvas, { recs, cfn, invertColors = false, minV, maxV, colorMode = "global", maxAbsInv = 0, matMin, matMax, showGrid, showLabels, dpr = 1, isMobile = false }) {
   if (!canvas || !recs?.length || minV == null || maxV == null) return;
 
   const ctx = canvas.getContext("2d");
@@ -308,7 +308,7 @@ function renderCanvas(canvas, { recs, cfn, minV, maxV, colorMode = "global", max
           : def.reduce((a, b) => a + b, 0) / def.length;
 
       const t = Math.max(0, Math.min(1, (val - baseMin) / rng));
-      const [r, g, b] = toRGB(cfn(t));
+      const [r, g, b] = toRGB(cfn(invertColors ? 1 - t : t));
       const i = (y * physW + x) * 4;
       dt[i] = r; dt[i + 1] = g; dt[i + 2] = b; dt[i + 3] = 255;
     }
@@ -387,6 +387,7 @@ export default function YieldCurveApp() {
   const containerRef = useRef(null);
 
   const [colorMode, setColorMode] = useState("global");
+  const [invertColors, setInvertColors] = useState(false);
   const [recs, setRecs] = useState(() => makeSynthData(2000, 2025));
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -491,8 +492,8 @@ export default function YieldCurveApp() {
       return r.maturity >= matMin && r.maturity <= matMax && y >= startYear && y <= endYear;
     });
 
-    renderCanvas(c, { recs: fr, cfn: PALETTES[palette].fn, minV, maxV, colorMode, maxAbsInv, matMin, matMax, showGrid, showLabels, dpr, isMobile });
-  }, [recs, dims, palette, matMin, matMax, showGrid, showLabels, minV, maxV, colorMode, maxAbsInv, startYear, endYear, isMobile]);
+    renderCanvas(c, { recs: fr, cfn: PALETTES[palette].fn, invertColors, minV, maxV, colorMode, maxAbsInv, matMin, matMax, showGrid, showLabels, dpr, isMobile });
+  }, [recs, dims, palette, invertColors, matMin, matMax, showGrid, showLabels, minV, maxV, colorMode, maxAbsInv, startYear, endYear, isMobile]);
 
   // Fetch from Bundesbank
   const handleFetch = async () => {
@@ -595,6 +596,7 @@ export default function YieldCurveApp() {
       renderCanvas(off, {
         recs: fr,
         cfn: PALETTES[palette].fn,
+        invertColors,
         minV,
         maxV,
         colorMode,
@@ -621,7 +623,7 @@ export default function YieldCurveApp() {
         setTimeout(() => { URL.revokeObjectURL(url); setExporting(false); setShowPopup(false); }, 1000);
       }, "image/png");
     }, 50);
-  }, [recs, palette, minV, maxV, colorMode, maxAbsInv, matMin, matMax, showGrid, showLabels, startYear, endYear]);
+  }, [recs, palette, invertColors, minV, maxV, colorMode, maxAbsInv, matMin, matMax, showGrid, showLabels, startYear, endYear]);
 
   // CSV Export (Dates as Rows, Maturities as Columns)
   const executeExportCSV = useCallback(() => {
@@ -668,9 +670,9 @@ export default function YieldCurveApp() {
   // Color bar gradient CSS string
   const colorBarGrad = useMemo(() => {
     const fn = PALETTES[palette].fn;
-    const stops = Array.from({ length: 14 }, (_, i) => fn(i / 13)).join(", ");
+    const stops = Array.from({ length: 14 }, (_, i) => fn(invertColors ? 1 - i / 13 : i / 13)).join(", ");
     return `linear-gradient(to right, ${stops})`;
-  }, [palette]);
+  }, [palette, invertColors]);
 
   // ── Style tokens ──────────────────────────────────────────────────────────
   const tok = {
@@ -1160,7 +1162,7 @@ export default function YieldCurveApp() {
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               {PALETTE_KEYS.filter((k) => PALETTES[k].group === paletteGroup).map((k) => {
                 const fn = PALETTES[k].fn;
-                const stops = Array.from({ length: 20 }, (_, i) => fn(i / 19)).join(", ");
+                const stops = Array.from({ length: 20 }, (_, i) => fn(invertColors ? 1 - i / 19 : i / 19)).join(", ");
                 const grad = `linear-gradient(to right, ${stops})`;
                 const isActive = palette === k;
                 return (
@@ -1202,6 +1204,15 @@ export default function YieldCurveApp() {
           {/* Display Options */}
           <div style={tok.section} className="mob-section">
             <div style={tok.lbl}>Display</div>
+            <div
+              className="toggle-row"
+              onClick={() => setInvertColors((v) => !v)}
+            >
+              <span style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: 500 }}>Invert Colors</span>
+              <div style={tok.tTrack(invertColors)}>
+                <div style={tok.tThumb(invertColors)} />
+              </div>
+            </div>
             <div
               className="toggle-row"
               onClick={() => setShowLabels((v) => !v)}
@@ -1485,7 +1496,7 @@ export default function YieldCurveApp() {
                 <div className="mob-palette-strip">
                   {PALETTE_KEYS.filter((k) => PALETTES[k].group === paletteGroup).map((k) => {
                     const fn = PALETTES[k].fn;
-                    const stops = Array.from({ length: 16 }, (_, i) => fn(i / 15)).join(", ");
+                    const stops = Array.from({ length: 16 }, (_, i) => fn(invertColors ? 1 - i / 15 : i / 15)).join(", ");
                     return (
                       <div key={k} className={`mob-swatch${palette === k ? " active" : ""}`} onClick={() => setPalette(k)}>
                         <div className="mob-swatch-bar" style={{ background: `linear-gradient(to right, ${stops})` }} />
@@ -1605,6 +1616,10 @@ export default function YieldCurveApp() {
             {mobTab === "display" && (
               <div>
                 <div style={tok.lbl}>Display Options</div>
+                <div className="toggle-row" onClick={() => setInvertColors((v) => !v)}>
+                  <span style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", fontWeight: 500 }}>Invert Colors</span>
+                  <div style={tok.tTrack(invertColors)}><div style={tok.tThumb(invertColors)} /></div>
+                </div>
                 <div className="toggle-row" onClick={() => setShowLabels((v) => !v)}>
                   <span style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", fontWeight: 500 }}>Axis Labels</span>
                   <div style={tok.tTrack(showLabels)}><div style={tok.tThumb(showLabels)} /></div>
