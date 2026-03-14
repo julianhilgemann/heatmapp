@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import * as d3 from "d3";
 import Slider from "rc-slider";
 import "rc-slider/assets/index.css";
+import Plot from "react-plotly.js";
 
 // ── Bundesbank API ────────────────────────────────────────────────────────────
 
@@ -388,6 +389,7 @@ export default function YieldCurveApp() {
 
   const [colorMode, setColorMode] = useState("global");
   const [invertColors, setInvertColors] = useState(false);
+  const [viewMode, setViewMode] = useState("2d"); // "2d" or "3d"
   const [recs, setRecs] = useState(() => makeSynthData(2000, 2025));
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -463,6 +465,80 @@ export default function YieldCurveApp() {
       mats,
     };
   }, [recs, matMin, matMax, startYear, endYear]);
+
+  // Compute 3D Plotly Data
+  const plotlyData = useMemo(() => {
+    if (viewMode !== "3d" || !dates?.length || !mats?.length) return null;
+
+    // Create a matrix Z[mats_index][dates_index]
+    const zMatrix = mats.map((m) => new Array(dates.length).fill(null));
+
+    // Lookup
+    const lk = {};
+    const fr = recs.filter((r) => {
+      const y = parseInt(r.date.split("-")[0]);
+      return r.maturity >= matMin && r.maturity <= matMax && y >= startYear && y <= endYear;
+    });
+
+    const maxMatPerDate = {};
+    fr.forEach((r) => {
+      if (!maxMatPerDate[r.date] || r.maturity > maxMatPerDate[r.date]) {
+        maxMatPerDate[r.date] = r.maturity;
+      }
+    });
+
+    fr.forEach((r) => {
+      if (!lk[r.date]) lk[r.date] = {};
+      lk[r.date][r.maturity] = r.value;
+    });
+
+    mats.forEach((m, yIdx) => {
+      dates.forEach((d, xIdx) => {
+        const val = lk[d]?.[m];
+        if (val === undefined) return;
+        if (colorMode === "inversion") {
+          const longYield = lk[d]?.[maxMatPerDate[d]];
+          if (longYield !== undefined) zMatrix[yIdx][xIdx] = val - longYield;
+        } else {
+          zMatrix[yIdx][xIdx] = val;
+        }
+      });
+    });
+
+    // Create colorscale array for Plotly (must be [ [step, "rgb()"], ... ])
+    const numStops = 20;
+    const cfn = PALETTES[palette].fn;
+    const plColorscale = Array.from({ length: numStops }, (_, i) => {
+      const t = i / (numStops - 1);
+      const mappedT = invertColors ? 1 - t : t;
+      const d3c = d3.rgb(cfn(mappedT));
+      return [t, `rgb(${d3c.r}, ${d3c.g}, ${d3c.b})`];
+    });
+
+    let cmin, cmax;
+    if (colorMode === "inversion") {
+      cmin = -maxAbsInv;
+      cmax = maxAbsInv;
+    } else {
+      cmin = minV;
+      cmax = maxV;
+    }
+
+    return [{
+      z: zMatrix,
+      x: dates,
+      y: mats.map(m => `${m}Y`),
+      type: "surface",
+      colorscale: plColorscale,
+      cmin,
+      cmax,
+      contours: {
+        z: { show: true, usecolormap: true, highlightcolor: "#fff", project: { z: true } }
+      },
+      hoverinfo: "x+y+z",
+      showscale: false
+    }];
+  }, [viewMode, dates, mats, recs, matMin, matMax, startYear, endYear, colorMode, palette, invertColors, minV, maxV, maxAbsInv]);
 
   // Resize observer
   useEffect(() => {
@@ -1031,6 +1107,56 @@ export default function YieldCurveApp() {
           }}
         >
 
+          {/* View Mode (2D/3D) */}
+          <div style={tok.section} className="mob-section">
+            <div style={tok.lbl}>View Mode</div>
+            <div style={{ display: "flex", gap: 6, padding: "0 0 10px" }}>
+              <button
+                style={{
+                  flex: 1,
+                  background: viewMode === "2d" ? "rgba(255,255,255,0.12)" : "transparent",
+                  border: "1px solid",
+                  borderColor: viewMode === "2d" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.07)",
+                  borderRadius: 6,
+                  color: viewMode === "2d" ? "#fff" : "rgba(255,255,255,0.35)",
+                  padding: "6px 0",
+                  fontSize: 11,
+                  fontWeight: viewMode === "2d" ? 600 : 400,
+                  cursor: "pointer",
+                  letterSpacing: "0.02em",
+                  fontFamily: "Inter, sans-serif",
+                  transition: "all 0.15s",
+                }}
+                onClick={() => setViewMode("2d")}
+              >
+                2D Heatmap
+              </button>
+              <button
+                style={{
+                  flex: 1,
+                  background: viewMode === "3d" ? "rgba(255,255,255,0.12)" : "transparent",
+                  border: "1px solid",
+                  borderColor: viewMode === "3d" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.07)",
+                  borderRadius: 6,
+                  color: viewMode === "3d" ? "#fff" : "rgba(255,255,255,0.35)",
+                  padding: "6px 0",
+                  fontSize: 11,
+                  fontWeight: viewMode === "3d" ? 600 : 400,
+                  cursor: "pointer",
+                  letterSpacing: "0.02em",
+                  fontFamily: "Inter, sans-serif",
+                  transition: "all 0.15s",
+                }}
+                onClick={() => setViewMode("3d")}
+              >
+                3D Surface
+              </button>
+            </div>
+            <p style={{ ...tok.mutedSpan, fontSize: 10, opacity: 0.6, lineHeight: 1.4 }}>
+              Toggle between a flat heatmap and an interactive 3D spatial plot.
+            </p>
+          </div>
+
           {/* Coloring Mode */}
           <div style={tok.section} className="mob-section">
             <div style={tok.lbl}>Coloring Mode</div>
@@ -1308,7 +1434,7 @@ export default function YieldCurveApp() {
           </div>
         </div>
 
-        {/* ── Main Canvas ───────────────────────────────────────────────── */}
+        {/* ── Main Canvas / 3D Plot ─────────────────────────────────────── */}
         <div
           ref={containerRef}
           className="yc-main"
@@ -1322,21 +1448,70 @@ export default function YieldCurveApp() {
             position: "relative",
           }}
         >
-          <canvas
-            ref={canvasRef}
-            style={{
-              borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.07)",
-              cursor: "crosshair",
-              display: "block",
-            }}
-            onMouseMove={handleMouseMove}
-            onMouseLeave={() => setTooltip(null)}
-          />
+          {viewMode === "2d" ? (
+            <canvas
+              ref={canvasRef}
+              style={{
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.07)",
+                cursor: "crosshair",
+                display: "block",
+              }}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={() => setTooltip(null)}
+            />
+          ) : (
+            <div style={{ flex: 1, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)" }}>
+              {plotlyData ? (
+                <Plot
+                  data={plotlyData}
+                  layout={{
+                    autosize: true,
+                    margin: { l: 0, r: 0, b: 0, t: 0, pad: 0 },
+                    paper_bgcolor: "#05050A",
+                    plot_bgcolor: "#05050A",
+                    scene: {
+                      xaxis: {
+                        color: "rgba(255,255,255,0.45)",
+                        gridcolor: "rgba(255,255,255,0.08)",
+                        zerolinecolor: "rgba(255,255,255,0.08)",
+                        title: { text: "Date", font: { color: "rgba(255,255,255,0.6)" } },
+                        tickfont: { family: '"IBM Plex Mono", monospace', size: 10 }
+                      },
+                      yaxis: {
+                        color: "rgba(255,255,255,0.45)",
+                        gridcolor: "rgba(255,255,255,0.08)",
+                        zerolinecolor: "rgba(255,255,255,0.08)",
+                        title: { text: "Maturity", font: { color: "rgba(255,255,255,0.6)" } },
+                        tickfont: { family: '"IBM Plex Mono", monospace', size: 10 }
+                      },
+                      zaxis: {
+                        color: "rgba(255,255,255,0.45)",
+                        gridcolor: "rgba(255,255,255,0.08)",
+                        zerolinecolor: "rgba(255,255,255,0.08)",
+                        title: { text: colorMode === "global" ? "Yield %" : "Spread %", font: { color: "rgba(255,255,255,0.6)" } },
+                        tickfont: { family: '"IBM Plex Mono", monospace', size: 10 }
+                      },
+                      camera: {
+                        eye: { x: 1.5, y: -1.5, z: 1.0 }
+                      }
+                    }
+                  }}
+                  useResizeHandler={true}
+                  style={{ width: "100%", height: "100%" }}
+                  config={{ responsive: true, displayModeBar: false }}
+                />
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#fff" }}>
+                  Rendering 3D...
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── Tooltip ───────────────────────────────────────────────────── */}
-        {tooltip && (
+        {viewMode === "2d" && tooltip && (
           <div
             className="tooltip-card"
             style={{
@@ -1517,6 +1692,54 @@ export default function YieldCurveApp() {
             {/* RANGE tab */}
             {mobTab === "range" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                <div>
+                  <div style={tok.lbl}>View Mode</div>
+                  <div style={{ display: "flex", gap: 6, padding: "0 0 10px" }}>
+                    <button
+                      style={{
+                        flex: 1,
+                        background: viewMode === "2d" ? "rgba(255,255,255,0.12)" : "transparent",
+                        border: "1px solid",
+                        borderColor: viewMode === "2d" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.07)",
+                        borderRadius: 6,
+                        color: viewMode === "2d" ? "#fff" : "rgba(255,255,255,0.35)",
+                        padding: "6px 0",
+                        fontSize: 11,
+                        fontWeight: viewMode === "2d" ? 600 : 400,
+                        cursor: "pointer",
+                        letterSpacing: "0.02em",
+                        fontFamily: "Inter, sans-serif",
+                        transition: "all 0.15s",
+                      }}
+                      onClick={() => setViewMode("2d")}
+                    >
+                      2D Heatmap
+                    </button>
+                    <button
+                      style={{
+                        flex: 1,
+                        background: viewMode === "3d" ? "rgba(255,255,255,0.12)" : "transparent",
+                        border: "1px solid",
+                        borderColor: viewMode === "3d" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.07)",
+                        borderRadius: 6,
+                        color: viewMode === "3d" ? "#fff" : "rgba(255,255,255,0.35)",
+                        padding: "6px 0",
+                        fontSize: 11,
+                        fontWeight: viewMode === "3d" ? 600 : 400,
+                        cursor: "pointer",
+                        letterSpacing: "0.02em",
+                        fontFamily: "Inter, sans-serif",
+                        transition: "all 0.15s",
+                      }}
+                      onClick={() => setViewMode("3d")}
+                    >
+                      3D Surface
+                    </button>
+                  </div>
+                  <p style={{ ...tok.mutedSpan, fontSize: 10, opacity: 0.6, lineHeight: 1.4, marginBottom: 18 }}>
+                    Toggle between a flat heatmap and an interactive 3D spatial plot.
+                  </p>
+                </div>
                 <div>
                   <div style={tok.lbl}>Coloring Mode</div>
                   <div style={{ display: "flex", gap: 6, padding: "0 0 10px" }}>
