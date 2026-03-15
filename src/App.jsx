@@ -569,7 +569,7 @@ export default function YieldCurveApp() {
     });
 
     renderCanvas(c, { recs: fr, cfn: PALETTES[palette].fn, invertColors, minV, maxV, colorMode, maxAbsInv, matMin, matMax, showGrid, showLabels, dpr, isMobile });
-  }, [recs, dims, palette, invertColors, matMin, matMax, showGrid, showLabels, minV, maxV, colorMode, maxAbsInv, startYear, endYear, isMobile]);
+  }, [recs, dims, palette, invertColors, matMin, matMax, showGrid, showLabels, minV, maxV, colorMode, maxAbsInv, startYear, endYear, isMobile, viewMode]);
 
   // Fetch from Bundesbank
   const handleFetch = async () => {
@@ -1472,24 +1472,30 @@ export default function YieldCurveApp() {
                     plot_bgcolor: "#05050A",
                     scene: {
                       xaxis: {
+                        showgrid: showGrid,
+                        showticklabels: showLabels,
                         color: "rgba(255,255,255,0.45)",
                         gridcolor: "rgba(255,255,255,0.08)",
                         zerolinecolor: "rgba(255,255,255,0.08)",
-                        title: { text: "Date", font: { color: "rgba(255,255,255,0.6)" } },
+                        title: { text: showLabels ? "Date" : "", font: { color: "rgba(255,255,255,0.6)" } },
                         tickfont: { family: '"IBM Plex Mono", monospace', size: 10 }
                       },
                       yaxis: {
+                        showgrid: showGrid,
+                        showticklabels: showLabels,
                         color: "rgba(255,255,255,0.45)",
                         gridcolor: "rgba(255,255,255,0.08)",
                         zerolinecolor: "rgba(255,255,255,0.08)",
-                        title: { text: "Maturity", font: { color: "rgba(255,255,255,0.6)" } },
+                        title: { text: showLabels ? "Maturity" : "", font: { color: "rgba(255,255,255,0.6)" } },
                         tickfont: { family: '"IBM Plex Mono", monospace', size: 10 }
                       },
                       zaxis: {
+                        showgrid: showGrid,
+                        showticklabels: showLabels,
                         color: "rgba(255,255,255,0.45)",
                         gridcolor: "rgba(255,255,255,0.08)",
                         zerolinecolor: "rgba(255,255,255,0.08)",
-                        title: { text: colorMode === "global" ? "Yield %" : "Spread %", font: { color: "rgba(255,255,255,0.6)" } },
+                        title: { text: showLabels ? (colorMode === "global" ? "Yield %" : "Spread %") : "", font: { color: "rgba(255,255,255,0.6)" } },
                         tickfont: { family: '"IBM Plex Mono", monospace', size: 10 }
                       },
                       camera: {
