@@ -1321,9 +1321,9 @@ export default function YieldCurveApp() {
             </div>
             {/* Selected range display */}
             <div className="range-labels" style={{ marginTop: 10 }}>
-              <span style={tok.mutedSpan}>{colorMode === "global" ? (minV != null ? `${minV.toFixed(2)}%` : "—") : (maxAbsInv ? `-${maxAbsInv.toFixed(2)}%` : "—")}</span>
-              <span style={{ ...tok.mutedSpan, fontFamily: '"IBM Plex Mono", monospace', fontSize: 10 }}>{colorMode === "global" ? "yield %" : "inversion spread"}</span>
-              <span style={tok.mutedSpan}>{colorMode === "global" ? (maxV != null ? `${maxV.toFixed(2)}%` : "—") : (maxAbsInv ? `+${maxAbsInv.toFixed(2)}%` : "—")}</span>
+              <span style={{ ...tok.mutedSpan, flexShrink: 0 }}>{colorMode === "global" ? (minV != null ? `${minV.toFixed(2)}%` : "—") : (maxAbsInv ? `-${maxAbsInv.toFixed(2)}%` : "—")}</span>
+              <span style={{ ...tok.mutedSpan, fontFamily: '"IBM Plex Mono", monospace', fontSize: 10, textAlign: "center", width: "100%" }}>{colorMode === "global" ? "yield %" : "inversion spread"}</span>
+              <span style={{ ...tok.mutedSpan, flexShrink: 0 }}>{colorMode === "global" ? (maxV != null ? `${maxV.toFixed(2)}%` : "—") : (maxAbsInv ? `+${maxAbsInv.toFixed(2)}%` : "—")}</span>
             </div>
           </div>
 
@@ -1688,9 +1688,9 @@ export default function YieldCurveApp() {
                 </div>
                 {/* Range */}
                 <div className="range-labels" style={{ marginTop: 12 }}>
-                  <span style={tok.mutedSpan}>{colorMode === "global" ? (minV != null ? `${minV.toFixed(2)}%` : "—") : (maxAbsInv ? `-${maxAbsInv.toFixed(2)}%` : "—")}</span>
-                  <span style={{ ...tok.mutedSpan, fontFamily: '"IBM Plex Mono", monospace', fontSize: 10 }}>{colorMode === "global" ? "yield %" : "inversion spread"}</span>
-                  <span style={tok.mutedSpan}>{colorMode === "global" ? (maxV != null ? `${maxV.toFixed(2)}%` : "—") : (maxAbsInv ? `+${maxAbsInv.toFixed(2)}%` : "—")}</span>
+                  <span style={{ ...tok.mutedSpan, flexShrink: 0 }}>{colorMode === "global" ? (minV != null ? `${minV.toFixed(2)}%` : "—") : (maxAbsInv ? `-${maxAbsInv.toFixed(2)}%` : "—")}</span>
+                  <span style={{ ...tok.mutedSpan, fontFamily: '"IBM Plex Mono", monospace', fontSize: 10, textAlign: "center", width: "100%" }}>{colorMode === "global" ? "yield %" : "inversion spread"}</span>
+                  <span style={{ ...tok.mutedSpan, flexShrink: 0 }}>{colorMode === "global" ? (maxV != null ? `${maxV.toFixed(2)}%` : "—") : (maxAbsInv ? `+${maxAbsInv.toFixed(2)}%` : "—")}</span>
                 </div>
               </div>
             )}
