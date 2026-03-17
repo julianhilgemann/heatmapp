@@ -1660,6 +1660,24 @@ export default function YieldCurveApp() {
             {/* PALETTE tab */}
             {mobTab === "palette" && (
               <div>
+                {/* Active Palette Gradient & Range */}
+                <div style={{ marginBottom: 16 }}>
+                  <div
+                    style={{
+                      height: 12,
+                      borderRadius: 4,
+                      background: colorBarGrad,
+                      marginBottom: 6,
+                      border: `1px solid ${tok.border}`,
+                    }}
+                  />
+                  <div className="range-labels">
+                    <span style={{ ...tok.mutedSpan, flexShrink: 0 }}>{colorMode === "global" ? (minV != null ? `${minV.toFixed(2)}%` : "—") : (maxAbsInv ? `-${maxAbsInv.toFixed(2)}%` : "—")}</span>
+                    <span style={{ ...tok.mutedSpan, fontFamily: '"IBM Plex Mono", monospace', fontSize: 10, textAlign: "center", width: "100%" }}>{colorMode === "global" ? "yield %" : "inversion spread"}</span>
+                    <span style={{ ...tok.mutedSpan, flexShrink: 0 }}>{colorMode === "global" ? (maxV != null ? `${maxV.toFixed(2)}%` : "—") : (maxAbsInv ? `+${maxAbsInv.toFixed(2)}%` : "—")}</span>
+                  </div>
+                </div>
+
                 {/* Group tabs */}
                 <div style={{ display: "flex", gap: 5, marginBottom: 12 }}>
                   {PALETTE_GROUPS.map((g) => (
@@ -1685,12 +1703,6 @@ export default function YieldCurveApp() {
                       </div>
                     );
                   })}
-                </div>
-                {/* Range */}
-                <div className="range-labels" style={{ marginTop: 12 }}>
-                  <span style={{ ...tok.mutedSpan, flexShrink: 0 }}>{colorMode === "global" ? (minV != null ? `${minV.toFixed(2)}%` : "—") : (maxAbsInv ? `-${maxAbsInv.toFixed(2)}%` : "—")}</span>
-                  <span style={{ ...tok.mutedSpan, fontFamily: '"IBM Plex Mono", monospace', fontSize: 10, textAlign: "center", width: "100%" }}>{colorMode === "global" ? "yield %" : "inversion spread"}</span>
-                  <span style={{ ...tok.mutedSpan, flexShrink: 0 }}>{colorMode === "global" ? (maxV != null ? `${maxV.toFixed(2)}%` : "—") : (maxAbsInv ? `+${maxAbsInv.toFixed(2)}%` : "—")}</span>
                 </div>
               </div>
             )}
