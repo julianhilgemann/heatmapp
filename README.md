@@ -83,4 +83,4 @@ Then import and render `<YieldCurveApp />` as your root component.
 
 ## Credits
 
-Built by [Julian Hilgemann](https://www.julianhilgemann.com). Part of the [AgenticBI](https://www.youtube.com/@AgenticBI) project series.
+Built by [Julian Hilgemann](https://julianhilgemann.com/start/?utm_source=github&utm_medium=referral&utm_campaign=heatmapp&utm_content=app). Part of the [AgenticBI](https://www.youtube.com/@AgenticBI) project series.

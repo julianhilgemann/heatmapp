@@ -1073,7 +1073,7 @@ export default function YieldCurveApp() {
           }}
         >
           <a
-            href="https://www.julianhilgemann.com"
+            href="https://julianhilgemann.com/start/?utm_source=github&utm_medium=referral&utm_campaign=heatmapp&utm_content=app"
             target="_blank"
             rel="noopener noreferrer"
             style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
@@ -1424,7 +1424,7 @@ export default function YieldCurveApp() {
           >
             <span style={tok.footerSpan}>Made with ❤️ by Julian Hilgemann</span>
             <a
-              href="https://www.julianhilgemann.com"
+              href="https://julianhilgemann.com/start/?utm_source=github&utm_medium=referral&utm_campaign=heatmapp&utm_content=app"
               target="_blank"
               rel="noopener noreferrer"
               style={{ ...tok.footerSpan, color: "rgba(255,255,255,0.3)", textDecoration: "none" }}
