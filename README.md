@@ -1,6 +1,6 @@
 # Yield Curve Heatmap
 
-[Live Demo: https://julianhilgemann.github.io/heatmapp/](https://julianhilgemann.github.io/heatmapp/)
+[Live Demo: https://julianhilgemann.github.io/yield_curve_heatmap_app/](https://julianhilgemann.github.io/yield_curve_heatmap_app/)
 
 An interactive browser-based visualization of the German government yield curve, built with React and D3. Fetches monthly Svensson zero-coupon yields directly from the Deutsche Bundesbank's public SDMX REST API and renders them as a smooth, interpolated heatmap.
 
